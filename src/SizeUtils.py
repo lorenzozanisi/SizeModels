@@ -5,6 +5,7 @@ import colossus.cosmology.cosmology as cosmo
 from colossus.halo import concentration, mass_so
 from colossus.lss.mass_function import massFunction
 from scipy.interpolate import interp1d
+from scipy.integrate import cumtrapz
 import pandas as pd
 from functools import lru_cache
 from HaloUtils import Volume
@@ -26,33 +27,39 @@ class SizeModel(Volume):
         print('Could not compute size function')
         return
     
-    def get_distrib(self,Re, z,bins, Type='Cassata', stars = None):   
+    def get_distrib(self,Re,bins, Type='Cassata', stars = None, Re0=None):   
     
         compactDef = globals()[Type]
+        Re = Re-Re0
+        #bins = bins-Re0
         cdef = compactDef(bins,Re,logstars = stars)
         H = cdef.hist()
-        binwidth = bins[1]-bins[0]
-        Bins = bins[1:]-0.5*binwidth
+        bwidth = bins[1]-bins[0]
+        Bins = bins[1:]-0.5*bwidth
         try:
-            return np.array([Bins, H/self.Vol/(binwidth)])
+            return np.array([Bins, H])
         except:
             self._print_error
-
-  #  def get_mean_size(halos,redshift,A_K,sigma_K,stars,masslow,massup, sigmaK_evo=False):
-  #      rhalo = get_Rh(halos, redshift)
-  #      inp = rhalo*A_K
-  #      if sigmaK_evo:
-  #          sigma_K= 0.15+0.05*redshift
-  #      Re_ = Kravtsov(inp, A=A_K, scatt=sigma_K)
-  #      mask = np.ma.masked_inside(stars, masslow, massup).mask#
-
-  #      try:
-  #          return 10**np.percentile(Re_[mask],50)  #mean size evolution
-  #      except:
-  #          m = (masslow+massup)/2
-  #          print('Could not compute size evolution for mass='+str(m)+'and z='+str(redshift))
-  #          return np.nan
+            
+    def get_number_density_and_compacts(self,Re, bins, Type='Cassata', stars = None, Re0 = None): 
         
+        if Type=='Cassata':  #ugly, need to find a better solution
+            if Re0 is None:
+                raise ValueError("Re0 must be provided if Type=='Cassata'")
+            else:
+                Re = Re - Re0 
+                #  bins = bins -Re0
+                
+        compactDef = globals()[Type]
+        cdef = compactDef(bins,Re,logstars = stars)
+       
+        N = cdef.number_density()
+        Ncompact = cdef.compacts()
+        try:
+            return N, Ncompact
+        except:
+            self._print_error        
+            
         
 class K13Model(SizeModel):
     def __init__(self,rhalo, A_K, sigma_K,Vol=None): 
@@ -139,33 +146,56 @@ class LambdaModel(SizeModel):
         
 class CompactDefinition:
     def __init__(self):
-        pass
+        super().__init__()
+        self.Vol = (700)**3   #Fix
     def hist(self):
-        return np.histogram(self.quantity, bins=self.bins)[0] 
-        
+        bwidth = self.bins[1]-self.bins[0]
+        return np.histogram(self.quantity, bins=self.bins)[0]/self.Vol/bwidth
+    
+    def number_density(self):
+        h = self.hist()
+        bwidth = self.bins[1]-self.bins[0]
+        return  np.sum(h)*bwidth #cumtrapz(h,self.bins[1:])[-1]
+    
+    def compacts(self):
+        h = self.hist()
+        bwidth = self.bins[1]-self.bins[0]
+        if self.threshold < 1:  # bit dirty, but encompasses Cassata and VanDerWel
+            mask = np.ma.masked_less(self.bins[1:]-bwidth, self.threshold).mask  
+        else:
+            mask = np.ma.masked_greater(self.bins[1:]-bwidth, self.threshold).mask
+        return np.sum(h[mask])*bwidth # cumtrapz(,self.bins[1:][mask])[-1]
+
 
 class Cassata(CompactDefinition):
     def __init__(self, bins, Re, logstars=None):
         super().__init__()
         self.bins = bins
         self.quantity = Re
-        
-class Gargiulo(CompactDefinition):
-    def __init__(self, bins, Re, logstars):
-        super().__init__()
-        self.bins = bins
-        self.quantity = stars-2*Re-np.log10(2*np.pi) - 6 # -6 to convert from pc^-2 to kpc^-2
+        self.threshold = -0.4   #lower than
 
+        
 class VanDerWel(CompactDefinition):
     def __init__(self, bins, Re, logstars):
         super().__init__()    
         self.bins = bins
         self.quantity = Re-0.75*(logstars-11)
+        self.threshold = np.log10(2.5) #lower than
+        
+        
+class Gargiulo(CompactDefinition):
+    def __init__(self, bins, Re, logstars,):
+        super().__init__()
+        self.bins = bins
+        self.quantity = logstars-2*Re-np.log10(2*np.pi) - 6 # -6 to convert from pc^-2 to kpc^-2
+        self.threshold = 3.3 #higher than
+
         
 class Barro(CompactDefinition):
     def __init__(self, bins, Re, logstars):
         super().__init__()        
         self.bins = bins
         self.quantity = logstars-1.5*Re
+        self.threshold = 10.3
         
  
