@@ -142,7 +142,7 @@ if __name__=='__main__':
 
     
     bins=np.arange(-2,2,0.10)
-    mus = [2,3]
+    mus = [2.5,4]
 
 
     dt = 0.1
@@ -165,7 +165,7 @@ if __name__=='__main__':
     axes[0][0].plot(xx,xx, lw=4, ls=':', color='black', label='$\mu=${}'.format(mus[0]))
     axes[0][0].plot(xx,xx, lw=4, ls='-',  color='black', label='$\mu=${}'.format(mus[1]))
     for mu,ls in zip(mus, [':','-']):
-        dictionary_models = {'model 3':model_3, 'model 4':model_4}#,'model 3':model_3,'model 4':model_4}
+        dictionary_models = {'model 1':model_1, 'model 2':model_}#,'model 3':model_3,'model 4':model_4}
         out = {model_label: {'star forming':[], 'quenched':[]} for model_label in dictionary_models.keys()}   
      
         out_, n_SF_model_ = make_compacts(redshifts,bins,mu, dictionary_models,N_deltas)
@@ -232,5 +232,5 @@ if __name__=='__main__':
 
 
     #fig.suptitle('$\mu=${}'.format(mu))
-    plt.savefig('continuity_mu_composite_models3_4.pdf', bbox_inched='tight')
+    plt.savefig('continuity_mu_composite_models1_2_mu25_4.pdf', bbox_inched='tight')
     fig.clf()
