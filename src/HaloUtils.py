@@ -49,17 +49,24 @@ class DarkMatter(Volume):
         return cat
   
     def _getHaloMass(self):
-        dlog10m=0.005
-        hmf_choice='despali16' 
-        Mvir=10**np.arange(11.,16,dlog10m) #Mh/h
-        massfunct =  massFunction(x=Mvir, z=self.z, mdef=self.mdef, model='despali16', q_out='dndlnM')*np.log(10)  #dn/dlog10M
-        massfunct = massfunct*(cosmol.h)**3 #convert  from massf*h**3
-        Mvir=np.log10(Mvir)
-        Mvir=Mvir-np.log10(cosmol.h)  #convert from M/h
+  
+        massfunct,Mvir = self.massf()
+        dlog10m = Mvir[1]-Mvir[0]
         Ncum=self.Vol*(np.cumsum((massfunct*dlog10m)[::-1])[::-1])
         halos=self._extract_catalog(Ncum,Mvir)
         return halos
     
+    def massf(self, Mvir=None):
+        if Mvir is None:
+            dlog10m=0.005
+            Mvir=10**np.arange(11.,15,dlog10m) #Mh/h
+        massfunct =  massFunction(x=Mvir, z=self.z, mdef=self.mdef, model='despali16', q_out='dndlnM')*np.log(10)  #dn/dlog10M
+        massfunct = massfunct*(cosmol.h)**3 #convert  from massf*h**3
+        Mvir=np.log10(Mvir)    
+        Mvir=Mvir-np.log10(cosmol.h)  #convert from M/h
+        return massfunct,Mvir # h-less units
+        
+        
     def _getHaloRadius(self,halos):
         halonew = np.array(10**halos)*cosmol.h #converts from Mvir to Mvir/h
         rhalo = mass_so.M_to_R(halonew,self.z,mdef=self.mdef)/cosmol.h  
@@ -103,7 +110,7 @@ class grylls19:
         if gamma10 is not None:
             self.gamma10 = gamma10
         else:
-            self.gamma10 = 0.53
+            self.gamma10 = 0.57 # 0.53
             
         if gamma11 is not None:
             self.gamma11 = gamma11
@@ -113,7 +120,7 @@ class grylls19:
         if M10 is not None:
             self.M10 = M10
         else:
-            self.M10 = 11.92
+            self.M10 = 11.95 #11.92
             
         if SHMnorm10 is not None:
             self.SHMnorm10 = SHMnorm10

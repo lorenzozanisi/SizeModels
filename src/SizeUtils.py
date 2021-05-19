@@ -6,6 +6,7 @@ from colossus.halo import concentration, mass_so
 from colossus.lss.mass_function import massFunction
 from scipy.interpolate import interp1d
 from scipy.integrate import cumtrapz
+from scipy.stats import binned_statistic
 import pandas as pd
 from functools import lru_cache
 from HaloUtils import Volume
@@ -60,6 +61,21 @@ class SizeModel(Volume):
         except:
             self._print_error        
             
+    def get_environmental_dependence(self, Re, logstars, halos):
+        
+        
+        M0 = np.median(logstars)
+        M0 = 11.3
+        gamma = 10**(Re+0.83*(11-logstars)) # above 10^11 0.83 is always valid
+        mask = np.ma.masked_inside(halos,12.5,13).mask
+        gamma_norm = np.mean(gamma[mask])
+        gamma = gamma/gamma_norm
+        
+        halobins = np.arange(12.5,15,0.1)
+        mean,_,_ = binned_statistic(halos, gamma,bins=halobins,statistic='mean')
+        scatter,_,_ = binned_statistic(halos, gamma,bins=halobins,statistic='std')
+        
+        return halobins[1:]-0.05, mean, scatter
         
 class K13Model(SizeModel):
     def __init__(self,rhalo, A_K, sigma_K,Vol=None): 
@@ -71,25 +87,28 @@ class K13Model(SizeModel):
         return np.random.normal(self.logA_K+self.rhalo, self.sigma_K)
         
 class Concentrationmodel(SizeModel):
-    def __init__(self,rhalo, A_c, sigma_c, gamma, Vol=None):
+    def __init__(self,rhalo, halos,z, A_c, sigma_c, gamma, Vol=None):
         super().__init__(rhalo=rhalo, Vol=Vol)
         self.logA_c = np.log10(A_c)
         self.sigma_c = sigma_c
         self.gamma = gamma
+        self.halos = halos
+        self.z = z
         
-    def concentrationDuttonMaccio14(x,z):
+    def concentrationDuttonMaccio14(self):
     
-        x = 10**(x+np.log10(0.7))
-        b =-0.097 +0.024*z
-        a=0.537 + (1.025-0.537)*np.e**(-0.718*z**1.08)
+        x = 10**(self.halos+np.log10(0.7))
+        b =-0.097 +0.024*self.z
+        a=0.537 + (1.025-0.537)*np.e**(-0.718*self.z**1.08)
         logc = a+b*(np.log10(x)-12)
         sc = 0.11
         logc  = np.random.normal(logc,scale=sc)
         return logc
 
     def to_galaxy_size(self): # A_c(c/10)**(-gamma)*R
+        logc = self.concentrationDuttonMaccio14()
         x = self.logA_c - self.gamma*(logc-np.log10(10))  #log10(10)=1, but keep it like this for clarity
-        return np.random.normal(x, size=len(self.rhalo)) + self.rhalo
+        return np.random.normal(x, self.sigma_c,size=len(self.rhalo)) + self.rhalo
         
     
 class LambdaModel(SizeModel):
